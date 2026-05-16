@@ -24,7 +24,10 @@ export function ConfigPageConnector() {
                     }
                 })
 
-                const wasmBytes = await fetchWithProgress('main.wasm', setDownloadProgress)
+                const wasmBytes = await fetchWithProgress(
+                    `${import.meta.env.BASE_URL}main.wasm`,
+                    setDownloadProgress
+                )
 
                 const { instance } = await WebAssembly.instantiate(wasmBytes, go.importObject)
                 go.run(instance)
