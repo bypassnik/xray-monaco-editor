@@ -6,10 +6,22 @@ export const MonacoSetupFeature = {
     setup: async (monaco: Monaco) => {
         try {
             const response = await axios.get('xray.schema.json')
-            const schema = await response.data
+            const schema = response.data
+
+            if (
+                !schema ||
+                typeof schema !== 'object' ||
+                !('definitions' in schema) ||
+                typeof (schema as { definitions?: unknown }).definitions !== 'object'
+            ) {
+                consola.error(
+                    'Invalid xray.schema.json: expected JSON Schema with definitions. Rebuild: make -f Makefile.windows schema'
+                )
+                return
+            }
 
             monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
-                allowComments: false,
+                allowComments: true,
                 enableSchemaRequest: true,
                 schemaRequest: 'warning',
                 schemas: [

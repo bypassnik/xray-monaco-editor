@@ -1,0 +1,50 @@
+# Сборка под Windows (Git Bash / MSYS2 / Cygwin: GNU make, sh, git, tar, grep, Python 3).
+# Пример: make -f Makefile.windows build
+# Китайская JSON-схема не собирается и не копируется в public/.
+# Схема: bash build-schema.sh (ищет python / py -3). Переопределение: PYTHON="C:/.../python.exe" make ...
+
+.PHONY: build dev-lite schema
+
+build: main.wasm wasm_exec.js xray.schema.json
+	mkdir -p ../public
+	mv main.wasm wasm_exec.js xray.schema.json ../public/
+
+dev-lite:
+	@test -f main.wasm || curl -fL -o main.wasm https://mmmray.github.io/xray-online/main.wasm
+	@test -f wasm_exec.js || curl -fL -o wasm_exec.js https://mmmray.github.io/xray-online/wasm_exec.js
+	@test -f xray.schema.json || curl -fL -o xray.schema.json https://mmmray.github.io/xray-online/xray.schema.json
+
+assets/xray-patched: xray-version.txt
+	rm -rf assets/xray-core assets/xray-patched
+	mkdir -p assets
+	cd assets && \
+		git clone https://github.com/xtls/xray-core xray-patched && \
+		cd xray-patched && \
+		git checkout -f $$(cat ../../xray-version.txt)
+	cat xray-wasm.patch | (cd assets/xray-patched && git apply)
+
+assets/geoip.dat:
+	mkdir -p assets
+	cd assets && curl -fL -O https://github.com/zuckerhalo/geotrim/releases/latest/download/geoip.dat
+
+assets/geosite.dat:
+	mkdir -p assets
+	cd assets && curl -fL -O https://github.com/zuckerhalo/geotrim/releases/latest/download/geosite.dat
+
+wasm_exec.js:
+	mkdir -p .wasm
+	curl -fL -o .wasm/wasm_exec.js https://raw.githubusercontent.com/golang/go/refs/heads/master/lib/wasm/wasm_exec.js
+	cp .wasm/wasm_exec.js .
+
+main.wasm: assets/geoip.dat assets/geosite.dat assets/xray-patched main.go go.mod xray-wasm.patch
+	GOARCH=wasm GOOS=js go build -o main.wasm main.go
+
+assets/Xray-docs-next-main:
+	mkdir -p assets
+	cd assets && curl -fL https://github.com/XTLS/Xray-docs-next/archive/refs/heads/main.tar.gz | tar xvzf -
+
+xray.schema.json: assets/Xray-docs-next-main scrape-docs.py build-schema.sh
+	bash build-schema.sh xray.schema.json
+
+schema: xray.schema.json
+	cp xray.schema.json ../public/xray.schema.json

@@ -1,8 +1,11 @@
+import argparse
 import json
 import re
 import sys
-
+from pathlib import Path
 from typing import Iterator, TypedDict
+
+DEFAULT_ROOT_DEFINITION = "Основные модули конфигурации"
 
 
 class RawType(TypedDict):
@@ -28,6 +31,7 @@ KNOWN_BAD_RESOLVES = (
     "noiseObject",
     "DnsServerObject",
     "xhttpSettings",
+    "XHTTPObject",
     "PingConfigObject",
     "XHTTP: Beyond REALITY",
     "CostObject",
@@ -35,6 +39,27 @@ KNOWN_BAD_RESOLVES = (
     "quicParamsObject",
 )
 USED_OBJECTS = set()
+
+DOCS_BASE_URL = "https://xtls.github.io/ru/config/"
+
+
+def normalize_doc_text(text: str) -> str:
+    if not text:
+        return text
+    return text.replace(
+        "в меню слева",
+        f"в [документации Xray]({DOCS_BASE_URL})",
+    )
+
+
+def normalize_descriptions(obj):
+    if isinstance(obj, str):
+        return normalize_doc_text(obj)
+    if isinstance(obj, dict):
+        return {k: normalize_descriptions(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [normalize_descriptions(item) for item in obj]
+    return obj
 
 
 def clean_prefix(line: str) -> bool:
@@ -211,12 +236,40 @@ def parse_type(input: str) -> dict:
     raise Exception(f"Unknown type: '{input}'")
 
 
+def read_stdin_lines() -> list[str]:
+    raw = sys.stdin.buffer.read()
+    if not raw:
+        return []
+    return raw.decode("utf-8", errors="replace").splitlines(keepends=True)
+
+
+def resolve_root_definition(cli_root: str | None) -> str:
+    return cli_root or DEFAULT_ROOT_DEFINITION
+
+
+def write_schema(schema: dict, output: str) -> None:
+    text = json.dumps(schema, indent=2, ensure_ascii=False) + "\n"
+    if output == "-":
+        sys.stdout.buffer.write(text.encode("utf-8"))
+        return
+    Path(output).write_text(text, encoding="utf-8", newline="\n")
+
+
 def main():
-    # root definition
-    root_definition = sys.argv[1]
+    parser = argparse.ArgumentParser(description="Build xray JSON Schema from VitePress docs grep stream")
+    parser.add_argument(
+        "root",
+        nargs="?",
+        default=None,
+        help="Root definition title (default: Основные модули конфигурации)",
+    )
+    parser.add_argument("-o", "--output", default="-", help="Output file (UTF-8). Default: stdout")
+    args = parser.parse_args()
+
+    root_definition = resolve_root_definition(args.root)
 
     definitions = {}
-    for definition in parse(sys.stdin):
+    for definition in parse(read_stdin_lines()):
         key = definition["title"]
         if key in definitions:
             # Handle multiple instances of
@@ -236,13 +289,15 @@ def main():
     #         "definitions": definitions
     #     }
 
-    schema = {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "$ref": f"#/definitions/{root_definition}",
-        "definitions": definitions,
-    }
+    schema = normalize_descriptions(
+        {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "$ref": f"#/definitions/{root_definition}",
+            "definitions": definitions,
+        }
+    )
 
-    print(json.dumps(schema, indent=2, ensure_ascii=False))
+    write_schema(schema, args.output)
 
 
 if __name__ == "__main__":

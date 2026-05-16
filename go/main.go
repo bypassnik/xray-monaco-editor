@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/tailscale/hujson"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/core"
@@ -54,8 +55,16 @@ func main() {
 			return nil
 		}
 
+		raw := []byte(arg.String())
+		hu, err := hujson.Parse(raw)
+		if err != nil {
+			return err.Error()
+		}
+		hu.Standardize()
+		strictJSON := hu.Pack()
+
 		var configObj interface{}
-		if err := json.Unmarshal([]byte(arg.String()), &configObj); err != nil {
+		if err := json.Unmarshal(strictJSON, &configObj); err != nil {
 			return err.Error()
 		}
 

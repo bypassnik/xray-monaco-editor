@@ -2,7 +2,10 @@ module github.com/mmmray/xray-online
 
 go 1.26
 
-require github.com/xtls/xray-core v0.0.0
+require (
+	github.com/tailscale/hujson v0.0.0-20260302212456-ecc657c15afd
+	github.com/xtls/xray-core v0.0.0
+)
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
